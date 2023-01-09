@@ -37,8 +37,12 @@ int xdp_load_balancer(struct xdp_md *ctx)
   // 1. DNAT: replace destination address with CLIENT or BACKEND, by judging direction.
   if (iph->saddr == IP_ADDRESS(CLIENT))
   {
-    iph->daddr = IP_ADDRESS(BACKEND_A);
-    eth->h_dest[ETH_ALEN - 1] = BACKEND_A;
+    unsigned char backend = BACKEND_A;
+    if (bpf_ntohs(tcph->source) % 2)
+      backend = BACKEND_B;
+
+    iph->daddr = IP_ADDRESS(backend);
+    eth->h_dest[ETH_ALEN - 1] = backend;
   }
   else /* if the saddr is BACKEND */
   {
