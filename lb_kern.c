@@ -33,7 +33,25 @@ int xdp_load_balancer(struct xdp_md *ctx)
 
   bpf_printk("Got packet from %x:%d", iph->saddr, bpf_ntohs(tcph->source));
 
-  return XDP_PASS;
+  // We are implementing LB in NAT mode. In the future we can try DSR.
+  // 1. DNAT: replace destination address with CLIENT or BACKEND, by judging direction.
+  if (iph->saddr == IP_ADDRESS(CLIENT))
+  {
+    iph->daddr = IP_ADDRESS(BACKEND_A);
+    eth->h_dest[ETH_ALEN - 1] = BACKEND_A;
+  }
+  else /* if the saddr is BACKEND */
+  {
+    iph->daddr = IP_ADDRESS(CLIENT);
+    eth->h_dest[ETH_ALEN - 1] = CLIENT;
+  }
+  // 2. SNAT: replace source address with LB's vip.
+  iph->saddr = IP_ADDRESS(LB);
+  eth->h_source[ETH_ALEN - 1] = LB;
+
+  iph->check = iph_csum(iph);
+
+  return XDP_TX;
 }
 
 char __license[] SEC("license") = "Dual MIT/GPL";
