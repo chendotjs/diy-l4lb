@@ -8,8 +8,12 @@ BPF_C = ${BPF_TARGET:=.c}
 BPF_OBJ = ${BPF_C:.c=.o}
 
 xdp: $(BPF_OBJ)
+ifeq (${HOSTNAME},lb)
 	ip link set eth0 xdpgeneric off
 	ip link set eth0 xdpgeneric obj lb_kern.o sec xdp
+else
+	@echo "===> Can only execute in container, exit... <==="
+endif
 
 image:
 	docker build -t $(IMAGE) .
