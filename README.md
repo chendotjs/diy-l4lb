@@ -20,7 +20,9 @@ Very far from production ready but hopefully it will be sufficient to give you a
 
 ## 1.1 What is a loadbalancer
 
->  **Load balancing** refers to efficiently distributing incoming network traffic across a group of backend servers, also known as a *server farm* or *server pool*.
+ **Load balancing** refers to efficiently distributing incoming network traffic across a group of backend servers, also known as a *server farm* or *server pool*.
+
+Load balancers functions are frequently divided into two categories: Layer 4 and Layer 7 as per the OSI Model.
 
 ![](assets/2023-01-10-15-32-57-image.png)
 
@@ -28,13 +30,13 @@ Very far from production ready but hopefully it will be sufficient to give you a
 
 ![](assets/2023-01-10-15-44-14-image.png)
 
-In the OSI reference model, the network is split into several different layers. In our situation, we are only interested in  Ethernet frame.
+In the OSI reference model, the network is split into several different layers. In our situation, we are only interested in  Ethernet frame and TCP/IP protocol.
 
-- L2: Ethernet header
+- L2: Ethernet header, [struct ethhdr](https://github.com/torvalds/linux/blob/830b3c68c1fb1e9176028d02ef86f3cf76aa2476/include/uapi/linux/if_ether.h#L173-L177)
 
-- L3: IP header
+- L3: IP header, [struct iphdr](https://github.com/torvalds/linux/blob/830b3c68c1fb1e9176028d02ef86f3cf76aa2476/include/uapi/linux/ip.h#L86-L108)
 
-- L4: TCP header
+- L4: TCP header, [struct tcphdr](https://github.com/torvalds/linux/blob/830b3c68c1fb1e9176028d02ef86f3cf76aa2476/include/uapi/linux/tcp.h#L25-L58)
 
 # 2 Demonstration Environment
 
@@ -42,9 +44,9 @@ Our demonstration environment consists 4 components which are shown as below.
 
 ![](assets/2023-01-10-15-56-58-image.png)
 
-All the components are running as docker containers in the same host. Each container has a virtual ethernet interface attached to an unique docker bridge.
+All the components are running as docker containers in the same host. Each container has a virtual ethernet interface attached to an unique docker bridge (172.255.255.0/24).
 
-Both backend-A and backend-B are [nginx hello demos](https://github.com/nginxinc/NGINX-Demos/tree/master/nginx-hello). There is
+Both backend-A and backend-B are [nginx hello demos](https://github.com/nginxinc/NGINX-Demos/tree/master/nginx-hello) which can handle HTTP requests.
 
 To make it simple, both the mac address and the ip address  are managed mannually and only vary in their last byte.
 
@@ -62,9 +64,11 @@ make setup-env
 
 ![](assets/2023-01-10-16-17-03-image.png)
 
-The XDP bpf program is attached to the virtual interface in LB container. Every packet ingressed to LB container will be processed by our program.
+The XDP ebpf program is attached to the virtual interface in LB container. Every packet that arrives LB container will be processed by our ebpf program.
 
-Our implementation is [NAT mode](https://www.loadbalancer.org/glossary/layer-4-nat-mode/), which means packet arrived in LB container would be DNATed and SNATed.
+Our implementation model is L4 [NAT mode](https://www.loadbalancer.org/glossary/layer-4-nat-mode/), which means packet arrived in LB container would be DNATed and SNATed.
+
+To load XDP program in LB container, please refer to the following instructions.
 
 ```
 ☁  ~  docker exec -it lb bash
@@ -98,6 +102,18 @@ root@lb:/diy-l4lb-code#
 ## 3.2 XDP actions
 
 ![](assets/2023-01-10-16-17-15-image.png)
+
+The final verdict for what happens to a packet after it has been processed by the XDP program is communicated to the kernel by means of the program return code.
+
+```c
+enum xdp_action {
+	XDP_ABORTED = 0,
+	XDP_DROP,
+	XDP_PASS,
+	XDP_TX,
+	XDP_REDIRECT,
+};
+```
 
 | actions  | description                                                                                             |
 | -------- | ------------------------------------------------------------------------------------------------------- |
